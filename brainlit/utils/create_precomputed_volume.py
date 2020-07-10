@@ -58,11 +58,7 @@ def create_cloud_volume(
         ],  # e.g. a cubic millimeter dataset
     )
     vol = CloudVolume(precomputed_path, info=info, parallel=parallel)
-    [
-        vol.add_scale((2 ** i, 2 ** i, 1), chunk_size=chunk_size)
-        for i in range(num_resolutions)
-    ]
-
+    [vol.add_scale((2 ** i, 2 ** i, 2 ** i)) for i in range(num_resolutions)]
     vol.commit_info()
     return vol
 

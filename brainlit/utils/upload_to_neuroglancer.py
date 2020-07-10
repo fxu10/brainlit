@@ -1,9 +1,11 @@
+import math
 from tqdm import tqdm
 import argparse
 import numpy as np
 from cloudvolume import CloudVolume
 from pathlib import Path
 import tifffile as tf
+from psutil import virtual_memory
 from joblib import Parallel, delayed, cpu_count
 
 
@@ -33,12 +35,12 @@ def create_image_layer(s3_bucket, tif_dimensions, voxel_size, num_resolutions):
         volume_size=[i * 2 ** (num_resolutions - 1) for i in tif_dimensions],
     )
     # get cloudvolume info
-    vol = CloudVolume(s3_bucket, info=info, parallel=True, compress=False)
+    vol = CloudVolume(s3_bucket, info=info, parallel=False, compress=False)
     # scales resolution up, volume size down
     [vol.add_scale((2 ** i, 2 ** i, 2 ** i)) for i in range(num_resolutions)]
     vol.commit_info()
     vols = [
-        CloudVolume(s3_bucket, mip=i, parallel=True, compress=False)
+        CloudVolume(s3_bucket, mip=i, parallel=False, compress=False)
         for i in range(num_resolutions - 1, -1, -1)
     ]
     return vols
@@ -110,7 +112,7 @@ def parallel_upload_chunks(vol, files, bin_paths, chunk_size, num_workers):
     )
 
 
-def upload_chunks(vol, files, bin_paths, parallel=True):
+def upload_chunks(vol, files, bin_paths, tiff_dims, parallel=True):
     """Push tif images into vols with or without joblib Parallel
 
     Arguments:
@@ -126,7 +128,12 @@ def upload_chunks(vol, files, bin_paths, parallel=True):
 
     # all tifs will be this size, should be 528x400x208 for mouselight
     chunk_size = vol.info["scales"][-1]["size"]
-    num_workers = len(files) if len(files) < cpu_count() else cpu_count()
+    num_workers = min(
+        math.floor(
+            virtual_memory().total / (tiff_dims[0] * tiff_dims[1] * tiff_dims[2])
+        ),
+        cpu_count(),
+    )
     if parallel:
         print("Doing parallel stuff")
         for f, bin_path in tqdm(
@@ -233,13 +240,13 @@ def main():
             pbar.set_description_str(
                 f"uploading chunks to resolution {args.num_resolutions - idx - 1}..."
             )
-            upload_chunks(vols[idx], item[0], item[1], parallel=True)
+            upload_chunks(vols[idx], item[0], item[1], tiff_dims, parallel=True)
         else:
             if idx == (args.num_resolutions - args.chosen_res - 1):
                 pbar.set_description_str(
                     f"uploading chunks to resolution {args.num_resolutions - idx - 1}"
                 )
-                upload_chunks(vols[idx], item[0], item[1], parallel=True)
+                upload_chunks(vols[idx], item[0], item[1], tiff_dims, parallel=True)
 
 
 if __name__ == "__main__":
