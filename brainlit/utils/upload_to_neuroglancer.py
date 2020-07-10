@@ -1,16 +1,10 @@
 from tqdm import tqdm
-from glob import glob
 import argparse
 import numpy as np
-from cloudvolume import CloudVolume, Skeleton, storage
+from cloudvolume import CloudVolume
 from pathlib import Path
 import tifffile as tf
 from joblib import Parallel, delayed, cpu_count
-
-# chunk data for parallel work
-def chunks(l, n):
-    for i in range(0, len(l), n):
-        yield l[i : i + n]
 
 
 def create_image_layer(s3_bucket, tif_dimensions, voxel_size, num_resolutions):
@@ -21,14 +15,15 @@ def create_image_layer(s3_bucket, tif_dimensions, voxel_size, num_resolutions):
         voxel_size {list} -- 3 floats for voxel size in nm
         num_resolutions {int} -- number of resolutions for the image
     Returns:
-        vols {list} -- List of num_resolutions CloudVolume objects, starting from lowest resolution
+        vols {list} -- List of num_resolutions CloudVolume objects, starting from
+            lowest resolution
     """
     # create cloudvolume info
     info = CloudVolume.create_new_info(
         num_channels=1,
         layer_type="image",
         data_type="uint16",  # Channel images might be 'uint8'
-        encoding="raw",  # raw, jpeg, compressed_segmentation, fpzip, kempressed
+        encoding="raw",  # raw, jpeg, compressed_segmentation, fpzip
         resolution=voxel_size,  # Voxel scaling, units are in nanometers
         voxel_offset=[0, 0, 0],  # x,y,z offset in voxels from the origin
         # Pick a convenient size for your underlying chunk representation
@@ -124,6 +119,11 @@ def upload_chunks(vol, files, bin_paths, parallel=True):
         bin_paths {list} -- binary paths to tif files
         parallel {bool} -- True to use parallel version, false otherwise
     """
+    # chunk data for parallel work
+    def chunks(total, n):
+        for i in range(0, len(total), n):
+            yield total[i : i + n]
+
     # all tifs will be this size, should be 528x400x208 for mouselight
     chunk_size = vol.info["scales"][-1]["size"]
     num_workers = len(files) if len(files) < cpu_count() else cpu_count()
@@ -152,7 +152,8 @@ def get_volume_info(image_dir, num_resolutions, channel=0):
 
     Arguments:
         image_dir {str} -- filepath to HIGHEST LEVEL(lowest res) of octree dir
-        num_resolutions {int} -- Number of resolutions for which downsampling has been done
+        num_resolutions {int} -- Number of resolutions for which downsampling
+            has been done
         channel {int} -- Channel number to upload
     Returns:
         files_ordered {list} -- list of file paths, 1st dim contains list for each res
@@ -170,7 +171,7 @@ def get_volume_info(image_dir, num_resolutions, channel=0):
         [[f"{int(j)-1:03b}" for j in k if len(j) == 1] for k in i]
         for i in files_ordered
     ]
-    print(f"got files and binary representations of paths.")
+    print("got files and binary representations of paths.")
     tiff_dims = np.squeeze(tf.imread(image_dir + "/default.0.tif")).T.shape
     transform = open(image_dir + "/transform.txt", "r")
     vox_size = [
@@ -178,20 +179,23 @@ def get_volume_info(image_dir, num_resolutions, channel=0):
         for s in transform.readlines()
         if "s" in s
     ]
-    print(f"got dimensions of volume")
+    print("got dimensions of volume")
     return files_ordered, paths_bin, vox_size, tiff_dims
 
 
 def main():
     """
-    Runs the script to upload big brain files organized as octree (see https://github.com/neurodata/mouselight_code/issues/1)
-    to S3 in neuroglancer format.
+    Runs the script to upload big brain files organized as octree (see
+        https://github.com/neurodata/mouselight_code/issues/1) to S3 in
+        neuroglancer format.
 
     Example:
-    >> python upload_to_neuroglancer.py s3://mouse-light-viz/precomputed_volumes/brain1 /cis/local/jacs/data/jacsstorage/samples/2018-08-01/
+    >> python upload_to_neuroglancer.py s3://mouse-light-viz/precomputed_volumes/brain1
+        /cis/local/jacs/data/jacsstorage/samples/2018-08-01/
     """
     parser = argparse.ArgumentParser(
-        "Convert a folder of SWC files to neuroglancer format and upload them to the given S3 bucket location."
+        "Convert a folder of SWC files to neuroglancer format and upload them to the\
+            given S3 bucket location."
     )
     parser.add_argument(
         "s3_bucket",
@@ -199,7 +203,8 @@ def main():
     )
     parser.add_argument(
         "image_dir",
-        help="Path to local directory where image hierarchy lives. Assuming it is formatted as a resolution octree.",
+        help="Path to local directory where image hierarchy lives. Assuming it is\
+            formatted as a resolution octree.",
     )
     parser.add_argument(
         "--chosen_res",
@@ -208,7 +213,7 @@ def main():
         type=int,
     )
     parser.add_argument(
-        "--channel", help="Channel number to upload. Default is 0", default=0, type=int
+        "--channel", help="Channel number to upload. Default is 0", default=0, type=int,
     )
     parser.add_argument(
         "--num_resolutions",
@@ -232,7 +237,7 @@ def main():
         else:
             if idx == (args.num_resolutions - args.chosen_res - 1):
                 pbar.set_description_str(
-                    f"uploading chunks to resolution {args.num_resolutions - idx - 1}..."
+                    f"uploading chunks to resolution {args.num_resolutions - idx - 1}"
                 )
                 upload_chunks(vols[idx], item[0], item[1], parallel=True)
 
