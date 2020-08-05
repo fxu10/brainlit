@@ -76,7 +76,7 @@ def create_cloud_volume(
             dtype = "uint64"
         else:
             raise ValueError(
-                f"layer type is {layer_type}, when it should be image or str"
+                f"layer type is {layer_type}, when it should be image or segmentation"
             )
 
     info = CloudVolume.create_new_info(
@@ -195,6 +195,13 @@ def get_data_ranges(bin_path, chunk_size):
 
 
 def process(file_path, bin_path, vol):
+    """Add a tif image to a CloudVolume object
+
+    Args:
+        file_path {string} -- path of tif image
+        bin_path {list} -- binary paths to tif files
+        vol {CloudVolume object} -- object into which the image data will be uploaded
+    """
     array = tf.imread(file_path).T[..., None]
     ranges = get_data_ranges(bin_path, vol.scales[-1]["size"])
     vol[
