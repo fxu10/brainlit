@@ -49,6 +49,7 @@ def check_size(input, allow_float=True):
         check_iterable_type(input, (int, float))
     else:
         check_iterable_type(input, int)
+    check_iterable_positive(input)
 
 
 def check_precomputed(input):
