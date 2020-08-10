@@ -3,6 +3,10 @@ from cloudvolume import CloudVolume, storage
 import numpy as np
 import joblib
 from joblib import Parallel, delayed, cpu_count
+import os, warnings
+warnings.simplefilter("ignore") # Change the filter in this process
+os.environ["PYTHONWARNINGS"] = "ignore" # Also affect subprocesses
+
 import joblib
 from glob import glob
 import argparse
@@ -12,17 +16,16 @@ import contextlib
 
 import tifffile as tf
 from pathlib import Path
-from .swc import swc2skeleton
+from swc import swc2skeleton
 import time
 from tqdm.auto import tqdm
-from .util import (
+from util import (
     tqdm_joblib,
     check_type,
     check_iterable_type,
     check_size,
     check_precomputed,
 )
-
 
 def get_volume_info(
     image_dir: str,
@@ -208,9 +211,7 @@ def get_data_ranges(
 
     x_curr, y_curr, z_curr = 0, 0, 0
     tree_level = len(bin_path)
-    print(bin_path)
     for idx, i in enumerate(bin_path):
-        print(i)
         scale_factor = 2 ** (tree_level - idx - 1)
         x_curr += int(i[2]) * chunk_size[0] * scale_factor
         y_curr += int(i[1]) * chunk_size[1] * scale_factor
