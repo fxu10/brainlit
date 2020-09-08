@@ -1,16 +1,13 @@
 from tqdm import tqdm
-from glob import glob
 import argparse
 import numpy as np
-from cloudvolume import CloudVolume, Skeleton, storage
-from pathlib import Path
+from cloudvolume import CloudVolume
 import tifffile as tf
 from joblib import Parallel, delayed, cpu_count
 from cloudvolume.lib import mkdir, touch
 import warnings
 import os
 from brainlit.utils.upload_to_neuroglancer import (
-    chunks,
     create_image_layer,
     get_data_ranges,
     upload_chunks,
@@ -38,7 +35,7 @@ def upload_chunk(vol, ranges, image, progress_dir, to_upload):
         ranges {tuple} -- 3 tuple of lists for image stitch min,max bounds
         image {numpy array} -- 3D image array
     """
-    if not str(ranges) in done_files:
+    if str(ranges) in to_upload:
         vol[
             ranges[0][0] : ranges[0][1],
             ranges[1][0] : ranges[1][1],
@@ -95,16 +92,21 @@ def parallel_upload_chunks(vol, files, bin_paths, chunk_size, num_workers):
     #     delayed(upload_chunk)(vol_, r, i, progress_dir, to_upload)
     #     for r, i in zip(ranges, tiffs)
     # )
-
-    Parallel(tiff_jobs, timeout=1800, verbose=10)(
-        delayed(process)(f, b, chunk_size, vol_, progress_dir, done_files)
-        for f, b in zip(files, bin_paths)
-    )
+    parallel = True
+    if parallel:
+        Parallel(tiff_jobs, timeout=1800, verbose=10)(
+            delayed(process)(f, b, chunk_size, vol_, progress_dir, done_files)
+            for f, b in zip(files, bin_paths)
+        )
+    else:
+        for (fb,) in zip(files, bin_paths):
+            process(f, b, chunk_size, vol_, progress_dir, done_files, tiff_dims)
 
 
 def main():
     """
-    Runs the script to upload big brain files organized as octree (see https://github.com/neurodata/mouselight_code/issues/1)
+    Runs the script to upload big brain files organized as octree 
+    (see https://github.com/neurodata/mouselight_code/issues/1)
     to S3 in neuroglancer format.
 
     Example:
@@ -150,13 +152,13 @@ def main():
             pbar.set_description_str(
                 f"uploading chunks to resolution {args.num_resolutions - idx - 1}..."
             )
-            upload_chunks(vols[idx], item[0], item[1], parallel=True)
+            upload_chunks(vols[idx], item[0], item[1], tiff_dims, parallel=True)
         else:
             if idx == (args.num_resolutions - args.chosen_res - 1):
                 pbar.set_description_str(
                     f"uploading chunks to resolution {args.num_resolutions - idx - 1}..."
                 )
-                upload_chunks(vols[idx], item[0], item[1], parallel=True)
+                upload_chunks(vols[idx], item[0], item[1], tiff_dims, parallel=True)
 
 
 if __name__ == "__main__":
